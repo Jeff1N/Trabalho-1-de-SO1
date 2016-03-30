@@ -18,46 +18,42 @@
 	struct Queue {
 		Node* head;
 		Node* tail;
-
-		void    (*push)     (struct Queue*, int);
-		int     (*pop)      (struct Queue*);
-		int     (*peek)     (struct Queue*);
-		void    (*display)  (struct Queue*);
-		int size;
+		int size;	
 	};
 	typedef struct Queue Queue;
 
 	//Structs de Parada, Ônibus e Passageiro
-	struct Stp {
+	struct Stop {
 		pthread_t thread;		//A thread processando a parada atual
 		
 		int carro;				//Valor negativo indica que não há nenhum carro atualmente nesta parada
-		int contPassageiros;	//Quantos passageiros estão atualmente na esperando nesta parada
-	
 		Queue passEsperando;	//Fila de passageiros esperando no ponto de ônibus
 	};
-	typedef struct Stp Stop;
+	typedef struct Stop Stop;
 
-	struct Car {
+	struct Carro {
 		pthread_t thread;
 
-		int movimento;		//Se '1', está em movimento. Se '0', está parado
+		int estado;			//0 = parado, passageiros descendo; 1 = parado, passageiros subindo; 2 = na estrada
 		int stop;			//Se parado, mostra parada atual. Se em movimento, mostra próxima parada
-	
-		int contPassageiros;	//Quantos passageiros estão atualmente dentro do onibus		
-	};
-	typedef struct Car Carro;
+		int nCarro;			//Numero do carro atual
 
-	struct Pss {
+		Queue passBordo;	//Fila com passageiros a bordo deste carro
+		int passNDesc;		//Passageiros que informaram que não pretendem descer do ônibus
+
+		int tempoProxStop;	//Tempo faltando para a próxima parada
+	};
+	typedef struct Carro Carro;
+
+	struct Passageiro {
 		pthread_t thread;
 		
-		int viajando;			//Se '1', passageiro ainda não chegou no destino. Se '0', já chegou
-		
+		int viajando;			//1 = passageiro ainda não chegou no destino; 0 = já chegou
+		int onibus;				//-1 = não está num onibus; n = no do onibus atual
 		int ptoPartida;		
 		int ptoChegada;
 	};	
-	typedef struct Pss Passageiro;
-
+	typedef struct Passageiro Passageiro;
 
 //Variáveis globais
 	int terminou = 0;
@@ -142,7 +138,6 @@
 		//Inicializa Stops
 		for (i = 0; i < S; ++i){
 			stops[i].carro = -1; 			//Valor neg indica nenhum carro
-			stops[i].contPassageiros = 0;
 			stops[i].passEsperando = createQueue();
 		}
 		//Inicialize Passageiros
@@ -150,15 +145,22 @@
 		for (i = 0; i < P; ++i){
 			passageiros[i].viajando = 1;
 
-			passageiros[i].ptoPartida = rand() % (P-1);
-			passageiros[i].ptoChegada = rand() % (P-1);
+			passageiros[i].ptoPartida = rand() % (S-1);
+			passageiros[i].ptoChegada = rand() % (S-1);
 
-			if (passageiros[i].ptoPartida == passageiros[i].ptoChegada)
-				passageiros[i].ptoChegada++;
+			if (passageiros[i].ptoPartida == passageiros[i].ptoChegada){
+				if (passageiros[i].ptoPartida == S-1) passageiros[i].ptoChegada = 0;
+				else passageiros[i].ptoPartida++;
+			}
+
+			push(&stops[passageiros[i].ptoPartida].passEsperando, i);
 		}
 		//Inicializa Carros
 		for (i = 0; i < C; ++i){
-			carros[i].movimento = 0;
+			carros[i].estado = 0;
+			carros[i].nCarro = i;
+			carros[i].passBordo = createQueue();
+
 			carros[i].stop = rand() % (S-1);
 
 			while (stops[carros[i].stop].carro != -1) {
@@ -175,9 +177,9 @@
 			terminou = 1;
 			return;
 		}
-		//Threads de Paradas de Onibus
+		//Threads de Paradas
 		for (i = 0; i < S; ++i){
-			if(pthread_create(&stops[i].thread, NULL, funcStop, NULL)) {
+			if(pthread_create(&stops[i].thread, NULL, funcStop, (void *) &stops[i] )) {
 				fprintf(stderr, "Erro ao criar uma thread de parada de onibus, interrompendo programa.\n");
 				terminou = 1;
 				return;
@@ -185,7 +187,7 @@
 		}
 		//Threads de Passageiros
 		for (i = 0; i < P; ++i){
-			if(pthread_create(&passageiros[i].thread, NULL, funcPassageiro, NULL)) {
+			if(pthread_create(&passageiros[i].thread, NULL, funcPassageiro, (void *) &passageiros[i] )) {
 				fprintf(stderr, "Erro ao criar uma thread de passageiro, interrompendo programa.\n");
 				terminou = 1;
 				return;
@@ -193,7 +195,7 @@
 		}		
 		//Threads de Carros
 		for (i = 0; i < C; ++i){
-			if(pthread_create(&carros[i].thread, NULL, funcCarro, NULL)) {
+			if(pthread_create(&carros[i].thread, NULL, funcCarro, (void *) &carros[i] )) {
 				fprintf(stderr, "Erro ao criar uma thread de parada de carro, interrompendo programa.\n");
 				terminou = 1;
 				return;
@@ -204,34 +206,76 @@
 //Funções paralelas
 	void *Animacao(void *argAnimacao){
 		while (terminou != 1){
-			//printf("\033[H\033[J");
+			printf("\033[H\033[J");
 
+			printf("Paradas: \n\n");
 			int i;
 			for (i = 0; i < S; i++){
-				if (stops[i].carro >= 0) printf("(Carro %d) - ", stops[i].carro);
-				else printf("(S/ Carro) - ");
-				printf("Parada %d (%d passageiros)\n", (i+1), stops[i].contPassageiros);
+				printf("(Parada %d - Passageiros em espera: %d)\t", i, stops[i].passEsperando.size);
+				if (stops[i].carro >= 0) printf("(Carro %d - Passageiros a bordo: %d)\n", stops[i].carro, carros[stops[i].carro].passBordo.size);
+				else printf("(S/ Carro)\n");
 			}
-			printf("\n");
-
+			
+			printf("\nOnibus na estrada: \n\n");
 			for (i = 0; i < C; i++){
-				if (carros[i].movimento == 1) printf("Carro %d (prox S: %d) (Ps a bordo: %d)", (i+1), carros[i].stop, carros[i].contPassageiros);
+				if (carros[i].estado == 2) 
+				printf("Carro %d (prox S: %d) (Ps a bordo: %d)\n", i, carros[i].stop, carros[i].passBordo.size);
 			}
-
+			
+			/*printf("\nPassageiros:\n\n");
+			for (i = 0; i < P; i++){
+				printf("Passageiro %d: %d -> %d\n", i, passageiros[i].ptoPartida, passageiros[i].ptoChegada);
+			}*/
+			
 			sleep(2);
 		}
 	}
 
 	void *funcStop(void *argStop){
-		printf("Stop Thread\n");
-	}
-
-	void *funcCarro(void *argCarro){
 		
 	}
 
+	void *funcCarro(void *objCarro){
+		Carro *tCarro = (Carro *) objCarro;
+
+		while (!terminou){
+			//Se o carro está parado, espera passageiros (des)embarcarem e então parte para a próxima parada.
+			if (tCarro->estado == 0){
+				//if (tCarro->passNDesc == )
+			}
+
+			else if (tCarro->estado == 1){
+				if (stops[tCarro->stop].passEsperando.size > 0){
+					push(&(tCarro->passBordo), pop(&stops[tCarro->stop].passEsperando) );
+				}
+				else{
+					tCarro->estado = 1;
+					stops[tCarro->stop].carro = -1;
+
+					
+					tCarro->stop++;
+					if(tCarro->stop >= S) tCarro->stop = 0;
+					
+					tCarro->tempoProxStop = (rand() % 1000)+50;
+				}
+			}
+
+			//Se o carro está em movimento, diminui gradualmente o tempo para a próxima parada.
+			//Ao chegar lá, se a parada estiver vaga, estaciona.
+			else if ((tCarro->estado == 2)){
+				if (tCarro->tempoProxStop > 0){
+					tCarro->tempoProxStop--;
+				}
+				else{
+					tCarro->estado = 0;
+					//stops[tCarro->stop].carro
+				}
+			}
+		} 
+	}
+
 	void *funcPassageiro(void *argPassageiro){
-		printf("Pass Thread\n");
+		
 	}
 
 //Funções do TAD Queue
@@ -285,9 +329,6 @@
 		queue.size = 0;
 		queue.head = NULL;
 		queue.tail = NULL;
-		queue.push = &push;
-		queue.pop = &pop;
-		queue.peek = &peek;
-		queue.display = &display;
 		return queue;
 }
+
