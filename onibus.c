@@ -10,20 +10,20 @@
 //Structs e Typedefs
 	//TAD Queue
 	struct Node {
-	    int item;
-	    struct Node* next;
+		int item;
+		struct Node* next;
 	};
 	typedef struct Node Node;	
 
 	struct Queue {
-	    Node* head;
-	    Node* tail;
+		Node* head;
+		Node* tail;
 
-	    void    (*push)     (struct Queue*, int);
-	    int     (*pop)      (struct Queue*);
-	    int     (*peek)     (struct Queue*);
-	    void    (*display)  (struct Queue*);
-	    int size;
+		void    (*push)     (struct Queue*, int);
+		int     (*pop)      (struct Queue*);
+		int     (*peek)     (struct Queue*);
+		void    (*display)  (struct Queue*);
+		int size;
 	};
 	typedef struct Queue Queue;
 
@@ -250,46 +250,44 @@
 		queue->size++;
 	}
 
-int pop (Queue* queue) {
-Node* head = queue->head;
-int item = head->item;
-queue->head = head->next;
-queue->size--;
-free(head);
-return item;
-}
+	int pop (Queue* queue) {
+		Node* head = queue->head;
+		int item = head->item;
+		queue->head = head->next;
+		queue->size--;
+		free(head);
+		return item;
+	}
 
-int peek (Queue* queue) {
-Node* head = queue->head;
-return head->item;
-}
+	int peek (Queue* queue) {
+		Node* head = queue->head;
+		return head->item;
+	}
 
-void display (Queue* queue) {
-printf("\nDisplay: ");
-if (queue->size == 0)
-printf("No item in queue.\n");
-else {
-Node* head = queue->head;
-int i, size = queue->size;
-printf("%d item(s):\n", queue->size);
-for (i = 0; i < size; i++) {
-    if (i > 0)
-        printf(", ");
-    printf("%d", head->item);
-    head = head->next;
-}
-}
-printf("\n\n");
-}
+	void display (Queue* queue) {
+		printf("\nDisplay: ");
+		if (queue->size == 0) printf("No item in queue.\n");
+		else {
+			Node* head = queue->head;
+			int i, size = queue->size;
+			printf("%d item(s):\n", queue->size);
+			for (i = 0; i < size; i++) {
+				if (i > 0) printf(", ");
+				printf("%d", head->item);
+				head = head->next;
+			}
+		}
+		printf("\n\n");
+	}
 
-Queue createQueue () {
-Queue queue;
-queue.size = 0;
-queue.head = NULL;
-queue.tail = NULL;
-queue.push = &push;
-queue.pop = &pop;
-queue.peek = &peek;
-queue.display = &display;
-return queue;
+	Queue createQueue () {
+		Queue queue;
+		queue.size = 0;
+		queue.head = NULL;
+		queue.tail = NULL;
+		queue.push = &push;
+		queue.pop = &pop;
+		queue.peek = &peek;
+		queue.display = &display;
+		return queue;
 }
