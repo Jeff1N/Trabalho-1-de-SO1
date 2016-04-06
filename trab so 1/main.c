@@ -37,8 +37,8 @@
 		int stop;			//Se parado, mostra parada atual. Se em movimento, mostra próxima parada
 		int nCarro;			//Numero do carro atual
 
-		int nPass;		    //Numero de passageiros no ônibus
-        int nPassNDesc;     //Número de passageiros que confirmaram que não descem no ponto atual
+		int contPass;		//Contador de passageiros no ônibus
+        int contPassNDesc;     //Contador de passageiros que confirmaram que não descem no ponto atual
 
         time_t horaSaida;   //Tempo que o onibus saiu do ultimo ponto
 		int tempoProxStop;	//Tempo necessário para a próxima parada (em segundos)
@@ -59,6 +59,8 @@
         int tempoEspera;
 
 		enum estado {ptoPart = 0, indoDest = 1, Dest = 2, voltDest = 3, fim = 4} estado;
+
+		FILE *trace;
 	}Passageiro;
 
 
@@ -81,7 +83,8 @@
 
 //Declaração de funções
 	void Entrada();			//Recebe e trata a entrada das variáveis S, C, P e A
-	void Inicializacao();	//Inicializa as structs e a thread de cada membro
+	void Execucao();        //Mantém o programa executando enquanto a simulação não terminar, e encerra as ativades quando esta terminar
+	void Inicializacao();	//Inicializa as structs e threads de cada entidade
     void uAnimacao();       //Mostra apenas uma tela da animação
 
 	void *Animacao(void *argAnimacao);			//Função da thread de animação
@@ -97,22 +100,35 @@
 //Main
 	int main (){
 
-		Entrada();
-		Inicializacao();
-
-		while (passAindaViajando > 0) { }   //Mantém o programa rodando enquanto a simulação não terminar
-        terminou = 1;                       //Sinaliza as threads para terminarem sua execução
-
-        uAnimacao();
-
-        sem_destroy(&mutex);
+		Entrada();          //Recebe e trata a entrada das variáveis S, C, P e A
+		Inicializacao();    //Inicializa as structs e threads de cada entidade
+        Execucao();         //Mantém o programa executando enquanto a simulação não terminar, e encerra as ativades quando esta terminar
 
 		return 0;
 	}
 
-
-
 //Funções Sequenciais
+    //Mantém o programa executando enquanto a simulação não terminar.
+    //Quando ela terminar, encerra as threads, destroi o semáforo e termina o programa.
+    void Execucao(){
+        while (passAindaViajando > 0) { }   //Mantém o programa rodando enquanto a simulação não terminar
+        terminou = 1;                       //Sinaliza as threads para terminarem sua execução
+
+        uAnimacao();
+
+        int i;
+        for (i = 0; i < S; i++){
+            if(pthread_join(stops[i].thread, NULL)) fprintf(stderr, "Erro no 'join' de thread de parada.\n");   }
+
+        for (i = 0; i < P; i++){
+                if(pthread_join(passageiros[i].thread, NULL)) fprintf(stderr, "Erro no 'join' de thread de passageiro.\n");     }
+
+        for (i = 0; i < C; i++){
+                if(pthread_join(carros[i].thread, NULL)) fprintf(stderr, "Erro no 'join' de thread de carros.\n");  }
+
+        sem_destroy(&mutex);
+    }
+
     //Recebe e trata a entrada das variáveis S, C, P e A
 	void Entrada(){
 		printf("Numero de paradas (S): ");
@@ -146,7 +162,7 @@
 		passAindaViajando = P;
 	}
 
-    //Inicializa as structs e a thread de cada membro
+    //Inicializa as structs e threads de cada entidade
 	void Inicializacao(){
 	//Inicializa semáforo e arrays das structs Stop, Carro, Passageiro
 		sem_init(&mutex, 0, 1);
@@ -156,19 +172,19 @@
 		passageiros = malloc(sizeof(Passageiro) * P);
 
 		int i;
-		//Inicializa Stops
+    //Inicializa Stops
 		for (i = 0; i < S; ++i){
 			stops[i].carro = -1; 			//Valor neg indica nenhum carro
 			stops[i].passEsperando = createQueue();
 			stops[i].nStop = i;
 		}
-		//Inicialize Passageiros
+    //Inicialize Passageiros
 		srand(time(NULL));
 		for (i = 0; i < P; ++i){
 			passageiros[i].viajando = 1;
-			passageiros[i].estado = 0;
-			passageiros[i].onibus = -1;
-			passageiros[i].nPass = i;
+			passageiros[i].estado   = 0;
+			passageiros[i].onibus   = -1;
+			passageiros[i].nPass    = i;
 
 			passageiros[i].ptoPartida = rand() % (S-1);
 			passageiros[i].ptoChegada = rand() % (S-1);
@@ -180,8 +196,39 @@
 			passageiros[i].ponto = passageiros[i].ptoPartida;
 
 			push(&stops[passageiros[i].ptoPartida].passEsperando, i);
+
+			//***Mais que 9999 passageiros irá dar erro nos arquivos de trace
+			char fileName[32] = "./passageiro";
+			char fileNumber[4];
+
+			int j, k = i;
+			for (j = 0; j < 4; j++){
+                fileNumber[j] = '0' + (k % 10);
+                k /= 10;
+			}
+			for (j = 12; j < 16; j++){
+                fileName[j] = fileNumber[15 - j];
+			}
+
+			fileName[16] = '.';
+			fileName[17] = 't';
+			fileName[18] = 'r';
+			fileName[19] = 'a';
+			fileName[20] = 'c';
+			fileName[21] = 'e';
+			fileName[22] = '\0';
+
+			//printf("%s \n", fileName);
+			passageiros[i].trace = fopen(fileName, "w");
+
+			char buff[20];
+            time_t now = time(NULL);
+            strftime(buff, 20, "%Y-%m-%d %H:%M:%S", localtime(&now));
+
+			fprintf(passageiros[i].trace, "Horario que chegou no ponto de origem %d: %s\n",
+                    passageiros[i].ptoPartida, buff);
 		}
-		//Inicializa Carros
+    //Inicializa Carros
 		for (i = 0; i < C; ++i){
 			carros[i].estado = 1;	//Inicialmente nenhum passageiro está dentro de um ônibus, então estado inicial é de passageiros embarcando
 			carros[i].nCarro = i;
@@ -198,13 +245,14 @@
 		uAnimacao();
 
 	//Inicializa threads
-		//Thread de Animação
+
+	//Thread de Animação
 		if(pthread_create(&renderer, NULL, Animacao, NULL)) {
 			fprintf(stderr, "Erro ao criar a thread de animacao, interrompendo programa.\n");
 			terminou = 1;
 			return;
 		}
-		//Threads de Paradas
+	//Threads de Paradas
 		for (i = 0; i < S; ++i){
 			if(pthread_create(&stops[i].thread, NULL, funcStop, (void *) &stops[i] )) {
 				fprintf(stderr, "Erro ao criar uma thread de parada de onibus, interrompendo programa.\n");
@@ -212,7 +260,7 @@
 				return;
 			}
 		}
-		//Threads de Passageiros
+	//Threads de Passageiros
 		for (i = 0; i < P; ++i){
 			if(pthread_create(&passageiros[i].thread, NULL, funcPassageiro, (void *) &passageiros[i] )) {
 				fprintf(stderr, "Erro ao criar uma thread de passageiro, interrompendo programa.\n");
@@ -220,7 +268,7 @@
 				return;
 			}
 		}
-		//Threads de Carros
+	//Threads de Carros
 		for (i = 0; i < C; ++i){
 			if(pthread_create(&carros[i].thread, NULL, funcCarro, (void *) &carros[i] )) {
 				fprintf(stderr, "Erro ao criar uma thread de parada de carro, interrompendo programa.\n");
@@ -231,8 +279,8 @@
 	}
 
     //Mostra apenas uma tela da animação. Usada antes de iniciar as threads e depois que a simulação terminou,
-    //para se certificar que independente da ordem de execução da thread de animação, será mostrada a tela de antes de a
-    //animação começar e depois que ela terminar
+    //para se certificar que independente da ordem de execução da thread de animação, ela será executada ao menos uma vez
+    //logo após as structs serem inicializadas e logo
     void uAnimacao(){
         printf("\033[H\033[J");
             printf("\nPassageiros ainda em viagem: %d\n", passAindaViajando);
@@ -240,13 +288,13 @@
             int i;
             for (i = 0; i < S; i++){
                 printf("(S%d - P em espera: %d)\t", i, stops[i].passEsperando.size);
-                if (stops[i].carro >= 0) printf("(C%d - P a bordo: %d - Est: %d)\n", stops[i].carro, carros[stops[i].carro].nPass, carros[stops[i].carro].estado);
+                if (stops[i].carro >= 0) printf("(C%d - P a bordo: %d - Est: %d)\n", stops[i].carro, carros[stops[i].carro].contPass, carros[stops[i].carro].estado);
                 else printf("(S/ Carro)\n");
             }
 
             printf("\nOnibus na estrada(C): \n\n");
             for (i = 0; i < C; i++){
-                    printf("C%d (S: %d, P a bordo: %d, ", i, carros[i].stop, carros[i].nPass);
+                    printf("C%d (S: %d, P a bordo: %d, ", i, carros[i].stop, carros[i].contPass);
 
                     if (carros[i].tempoProxStop - (time(&tempo) - carros[i].horaSaida) >= 0 && carros[i].estado == 2)
                         printf("ETA: %d, ", carros[i].tempoProxStop - (time(&tempo) - carros[i].horaSaida) );
@@ -265,7 +313,7 @@
                 else if (passageiros[i].estado == indoDest || passageiros[i].estado == voltDest)
                     printf("C: %d, ", passageiros[i].onibus);
 
-                if (passageiros[i].estado == ptoPart)           printf("No Pto de Partida\n", (int)passageiros[i].estado);
+                if (passageiros[i].estado == ptoPart)           printf("No Pto de Partida\n");
                 else if (passageiros[i].estado == indoDest)     printf("Indo para o Pto de Destino\n");
                 else if (passageiros[i].estado == Dest){
                     if (time(&tempo) - passageiros[i].horaChegada < passageiros[i].tempoEspera)
@@ -291,13 +339,15 @@
             int i;
             for (i = 0; i < S; i++){
                 printf("(S%d - P em espera: %d)\t", i, stops[i].passEsperando.size);
-                if (stops[i].carro >= 0) printf("(C%d - P a bordo: %d - Est: %d)\n", stops[i].carro, carros[stops[i].carro].nPass, carros[stops[i].carro].estado);
+                if (stops[i].carro >= 0) printf("(C%d - P a bordo: %d - Est: %d)\n", stops[i].carro, carros[stops[i].carro].contPass, carros[stops[i].carro].estado);
                 else printf("(S/ Carro)\n");
             }
 
             printf("\nOnibus na estrada(C): \n\n");
             for (i = 0; i < C; i++){
-                    printf("C%d (S: %d, P a bordo: %d, ", i, carros[i].stop, carros[i].nPass);
+                    printf("C%d (S: ", i);
+                    if (carros[i].estado == 2) printf("=> ");
+                    printf("%d, P a bordo: %d, ", carros[i].stop, carros[i].contPass);
 
                     if (carros[i].tempoProxStop - (time(&tempo) - carros[i].horaSaida) >= 0 && carros[i].estado == 2)
                         printf("ETA: %d, ", carros[i].tempoProxStop - (time(&tempo) - carros[i].horaSaida) );
@@ -316,7 +366,7 @@
                 else if (passageiros[i].estado == indoDest || passageiros[i].estado == voltDest)
                     printf("C: %d, ", passageiros[i].onibus);
 
-                if (passageiros[i].estado == ptoPart)           printf("No Pto de Partida\n", (int)passageiros[i].estado);
+                if (passageiros[i].estado == ptoPart)           printf("No Pto de Partida\n");
                 else if (passageiros[i].estado == indoDest)     printf("Indo para o Pto de Destino\n");
                 else if (passageiros[i].estado == Dest){
                     if (time(&tempo) - passageiros[i].horaChegada < passageiros[i].tempoEspera)
@@ -343,23 +393,39 @@
                 int tamFila = tStop->passEsperando.size;
                 int i, p;
 
-                for (i = 0; i < tamFila && carros[tStop->carro].nPass < A; i++){
+                //Se o passageiro está num estado em que ele quer subir no ônibus, faz ele subir
+                //Caso contrário, coloca ele de volta na fila
+                for (i = 0; i < tamFila && carros[tStop->carro].contPass < A; i++){
                     p = pop(&(tStop->passEsperando));
 
                     if (passageiros[p].estado == ptoPart){
                         passageiros[p].estado = indoDest;
                         passageiros[p].onibus = tStop->carro;
-                        carros[tStop->carro].nPass++;
+                        carros[tStop->carro].contPass++;
 
                         passageiros[p].ponto = tStop->nStop;
+
+                        char buff[20];
+                        time_t now = time(NULL);
+                        strftime(buff, 20, "%Y-%m-%d %H:%M:%S", localtime(&now));
+
+                        fprintf(passageiros[p].trace, "Horario que entrou no ônibus %d: %s\n",
+                                tStop->carro, buff);
                     }
 
                     else if (passageiros[p].estado == Dest && time(&tempo) - passageiros[p].horaChegada >= passageiros[p].tempoEspera){
                         passageiros[p].estado = voltDest;
                         passageiros[p].onibus = tStop->carro;
-                        carros[tStop->carro].nPass++;
+                        carros[tStop->carro].contPass++;
 
                         passageiros[p].ponto = tStop->nStop;
+
+                        char buff[20];
+                        time_t now = time(NULL);
+                        strftime(buff, 20, "%Y-%m-%d %H:%M:%S", localtime(&now));
+
+                        fprintf(passageiros[p].trace, "Horario que entrou no onibus %d' para voltar: %s\n",
+                                tStop->carro, buff);
                     }
                     else{
                         push(&(tStop->passEsperando), p);
@@ -382,7 +448,7 @@
 			if (tCarro->estado == 0){   //Desembarque
                 sem_wait(&mutex);
 
-                if (tCarro->nPassNDesc == tCarro->nPass){
+                if (tCarro->contPassNDesc == tCarro->contPass){
                     tCarro->estado = 1;
                 }
 
@@ -390,8 +456,8 @@
 			}
 
 			else if (tCarro->estado == 1){  //Embarque
-                tCarro->nPassNDesc = 0;
-				if (stops[tCarro->stop].passEsperando.size == 0 || tCarro->nPass >= A){
+                tCarro->contPassNDesc = 0;
+				if (stops[tCarro->stop].passEsperando.size == 0 || tCarro->contPass >= A){
 					sem_wait(&mutex);
 
 					tCarro->estado = 2;
@@ -412,7 +478,7 @@
 			else if ((tCarro->estado == 2)){    //Viagem
 				sem_wait(&mutex);
 
-				if (time(&tempo) - tCarro->horaSaida >= tCarro->tempoProxStop){
+				if ( (time(&tempo) - tCarro->horaSaida) >= tCarro->tempoProxStop){
                     if (stops[tCarro->stop].carro = -1){
                         tCarro->estado = 0;
                         stops[tCarro->stop].carro = tCarro->nCarro;
@@ -446,7 +512,7 @@
                     if (carros[tPass->onibus].stop == tPass->ptoChegada){
                         push(&stops[tPass->ptoChegada].passEsperando, tPass->nPass);
 
-                        carros[tPass->onibus].nPass--;
+                        carros[tPass->onibus].contPass--;
 
                         tPass->onibus   = -1;
                         tPass->ponto    = tPass->ptoChegada;
@@ -454,10 +520,17 @@
 
                         time(&(tPass->horaChegada));
                         tPass->tempoEspera = (rand()%5) + 5;
+
+                        char buff[20];
+                        time_t now = time(NULL);
+                        strftime(buff, 20, "%Y-%m-%d %H:%M:%S", localtime(&now));
+
+                        fprintf(tPass->trace, "Horario que desceu do ônibus %d no ponto de destino %d: %s\n",
+                                carros[tPass->onibus].nCarro, tPass->ptoChegada, buff);
                     }
                     //Senão, espera
                     else{
-                        carros[tPass->onibus].nPassNDesc++;
+                        carros[tPass->onibus].contPassNDesc++;
                         tPass->ponto = carros[tPass->onibus].stop;
                     }
                     sem_post(&mutex);
@@ -469,17 +542,24 @@
                     sem_wait(&mutex);
                     //Se onibus voltou pro ponto de partida, desce
                     if (carros[tPass->onibus].stop == tPass->ptoPartida){
-                        carros[tPass->onibus].nPass--;
+                        carros[tPass->onibus].contPass--;
 
                         tPass->onibus   = -1;
                         tPass->ponto    = tPass->ptoPartida;
                         tPass->estado   = fim;
 
                         passAindaViajando--;
+
+                        char buff[20];
+                        time_t now = time(NULL);
+                        strftime(buff, 20, "%Y-%m-%d %H:%M:%S", localtime(&now));
+
+                        fprintf(tPass->trace, "Horario que desceu do ônibus %d' de volta ao ponto %d': %s\n",
+                                carros[tPass->onibus].nCarro, tPass->ptoPartida, buff);
                     }
                     //Senão, espera
                     else{
-                        carros[tPass->onibus].nPassNDesc++;
+                        carros[tPass->onibus].contPassNDesc++;
                         tPass->ponto = carros[tPass->onibus].stop;
                     }
                     sem_post(&mutex);
@@ -487,6 +567,7 @@
             }
         }
 
+        fclose(tPass->trace);
         pthread_exit(0);
 	}
 
