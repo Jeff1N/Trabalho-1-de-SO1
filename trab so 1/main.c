@@ -282,16 +282,21 @@
     //Renderiza um "quadro" da animação.
     void uAnimacao(){
         printf("\033[H\033[J");
-            printf("\nPassageiros ainda em viagem: %d\n", passAindaViajando);
+            printf("Passageiros ainda em viagem: %d\n\n", passAindaViajando);
             printf("Paradas (S): \n\n");
             int i;
             for (i = 0; i < S; i++){
-                printf("(S%d - P em espera: %d)\t", i, stops[i].passEsperando.size);
-                if (stops[i].carro >= 0) printf("(C%d - P a bordo: %d - Est: %d)\n", stops[i].carro, carros[stops[i].carro].contPass, carros[stops[i].carro].estado);
+                printf("S%d (P em espera: %d)\t", i, stops[i].passEsperando.size);
+                if (stops[i].carro >= 0) {
+                        printf("(C%d, P a bordo: %d, ", stops[i].carro, carros[stops[i].carro].contPass);
+
+                        if (carros[stops[i].carro].estado == 0)         printf("Desembarcando)\n");
+                        else if (carros[stops[i].carro].estado == 1)    printf("Embarcando)\n");
+                }
                 else printf("(S/ Carro)\n");
             }
 
-            printf("\nOnibus na estrada(C): \n\n");
+            printf("\nOnibus (C): \n\n");
             for (i = 0; i < C; i++){
                     printf("C%d (S: ", i);
                     if (carros[i].estado == 2) printf("=> ");
@@ -303,10 +308,9 @@
                     if      (carros[i].estado == 0) printf("Desembacando)\n");
                     else if (carros[i].estado == 1) printf("Embarcando)\n");
                     else if (carros[i].estado == 2) printf("Na estrada)\n");
-                //}
             }
 
-            printf("\nPassageiros:\n\n");
+            printf("\nPassageiros (P):\n\n");
             for (i = 0; i < P; i++){
                 printf("P%d (%d -> %d) ",  i, passageiros[i].ptoPartida, passageiros[i].ptoChegada);
                 if (passageiros[i].estado == ptoPart || passageiros[i].estado == Dest)
