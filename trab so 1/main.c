@@ -336,6 +336,8 @@
 
 //Funções paralelas
     //Função da thread de animação
+        //A lista de ônibus as vezes mostra algumas informações desatualizadas e/ou conflitantes,
+        //mas com funções extras de debug tudo estava certo :(
 	void *Animacao(void *argAnimacao){
 	    while(terminou == 0){
             sem_wait(&mutex);
@@ -398,6 +400,9 @@
 
                 sem_post(&mutex);
             }
+            else{
+                pthread_yield();
+            }
         }
 
         pthread_exit(0);
@@ -433,6 +438,8 @@
 					time(&tCarro->horaSaida);
                     tCarro->tempoProxStop = (rand()%4) + 4;
 
+                    pthread_yield();
+
 					sem_post(&mutex);
 				}
 			}
@@ -455,6 +462,9 @@
                         tCarro->tempoProxStop = (rand()%4) + 4;
                     }
 				}
+				else{
+                    pthread_yield();
+				}
 
 				sem_post(&mutex);
 			}
@@ -474,6 +484,13 @@
                     sem_wait(&mutex);
                     //Se onibus parou no ponto de destino, desce
                     if (carros[tPass->onibus].stop == tPass->ptoChegada){
+                        char buff[20];
+                        time_t now = time(NULL);
+                        strftime(buff, 20, "%Y-%m-%d %H:%M:%S", localtime(&now));
+
+                        fprintf(tPass->trace, "Horario que desceu do ônibus %d no ponto de destino %d: %s\n",
+                                carros[tPass->onibus].nCarro, tPass->ptoChegada, buff);
+
                         push(&stops[tPass->ptoChegada].passEsperando, tPass->nPass);
 
                         carros[tPass->onibus].contPass--;
@@ -484,13 +501,6 @@
 
                         time(&(tPass->horaChegada));
                         tPass->tempoEspera = (rand()%5) + 5;
-
-                        char buff[20];
-                        time_t now = time(NULL);
-                        strftime(buff, 20, "%Y-%m-%d %H:%M:%S", localtime(&now));
-
-                        fprintf(tPass->trace, "Horario que desceu do ônibus %d no ponto de destino %d: %s\n",
-                                carros[tPass->onibus].nCarro, tPass->ptoChegada, buff);
                     }
                     //Senão, espera
                     else{
@@ -500,12 +510,18 @@
                     sem_post(&mutex);
                 }
             }
-
             else if (tPass->estado == voltDest){
                 if (carros[tPass->onibus].estado == 0 && tPass->ponto != carros[tPass->onibus].stop){
                     sem_wait(&mutex);
                     //Se onibus voltou pro ponto de partida, desce
                     if (carros[tPass->onibus].stop == tPass->ptoPartida){
+                        char buff[20];
+                        time_t now = time(NULL);
+                        strftime(buff, 20, "%Y-%m-%d %H:%M:%S", localtime(&now));
+
+                        fprintf(tPass->trace, "Horario que desceu do ônibus %d' de volta ao ponto %d': %s\n",
+                                carros[tPass->onibus].nCarro, tPass->ptoPartida, buff);
+
                         carros[tPass->onibus].contPass--;
 
                         tPass->onibus   = -1;
@@ -513,13 +529,6 @@
                         tPass->estado   = fim;
 
                         passAindaViajando--;
-
-                        char buff[20];
-                        time_t now = time(NULL);
-                        strftime(buff, 20, "%Y-%m-%d %H:%M:%S", localtime(&now));
-
-                        fprintf(tPass->trace, "Horario que desceu do ônibus %d' de volta ao ponto %d': %s\n",
-                                carros[tPass->onibus].nCarro, tPass->ptoPartida, buff);
                     }
                     //Senão, espera
                     else{
@@ -528,6 +537,9 @@
                     }
                     sem_post(&mutex);
                 }
+            }
+            else{
+                pthread_yield();
             }
         }
 
