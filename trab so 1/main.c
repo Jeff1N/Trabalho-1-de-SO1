@@ -23,44 +23,46 @@
 
 	//Structs de Parada, Ônibus e Passageiro
 	typedef struct Stop {
-		pthread_t thread;		//A thread processando a parada atual
+		pthread_t thread;		//Thread que controla esta saída
+
+        Queue passEsperando;	//Fila de passageiros esperando no ponto de ônibus
 
         int nStop;              //Número do ponto atual
-		int carro;				//Valor negativo indica que não há nenhum carro atualmente nesta parada
-		Queue passEsperando;	//Fila de passageiros esperando no ponto de ônibus
+		int carro;				//-1 = nenhum carro atualmente nesta parada; n = no do onibus atualmente neste ponto
 	} Stop;
 
 	typedef struct Carro {
-		pthread_t thread;
+		pthread_t thread;   //Thread que controla este carro
 
 		int estado;			//0 = parado, passageiros descendo; 1 = parado, passageiros subindo; 2 = na estrada
-		int stop;			//Se parado, mostra parada atual. Se em movimento, mostra próxima parada
+
 		int nCarro;			//Numero do carro atual
+        int stop;			//Se parado, mostra parada atual. Se em movimento, mostra próxima parada
 
 		int contPass;		//Contador de passageiros no ônibus
-        int contPassNDesc;     //Contador de passageiros que confirmaram que não descem no ponto atual
+        int contPassNDesc;  //Contador de passageiros que confirmaram que não descem no ponto atual
 
         time_t horaSaida;   //Tempo que o onibus saiu do ultimo ponto
 		int tempoProxStop;	//Tempo necessário para a próxima parada (em segundos)
 	} Carro;
 
 	typedef struct Passageiro {
-		pthread_t thread;
-		int nPass;              //Número do passageiro
+		pthread_t thread;       //Thread que controla este passageiro
+		FILE *trace;            //Arquivo de saída deste passageiro
 
 		int viajando;			// 1 = passageiro ainda não chegou no destino; 0 = já chegou
+
+		int nPass;              //Número do passageiro
 		int onibus;				//-1 = não está num onibus; n = no do onibus atual
 		int ponto;              //-1 = não está num ponto;  n = no do ponto atual
 
 		int ptoPartida;
 		int ptoChegada;
 
-		time_t horaChegada;
-        int tempoEspera;
+		time_t horaChegada;     //Tempo que o passageiro chegou no ponto de destino
+        int tempoEspera;        //Quanto tempo o passageiro pretende passar no ponto de destino
 
 		enum estado {ptoPart = 0, indoDest = 1, Dest = 2, voltDest = 3, fim = 4} estado;
-
-		FILE *trace;
 	}Passageiro;
 
 
@@ -75,6 +77,7 @@
 
     pthread_t renderer; 	//Thread que cuida da animação
 
+    //Arrays de structs das entidades da simulação
 	Stop 		*stops;
 	Carro 		*carros;
 	Passageiro 	*passageiros;
