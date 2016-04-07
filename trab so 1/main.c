@@ -118,13 +118,13 @@
 
         int i;
         for (i = 0; i < S; i++){
-            if(pthread_join(stops[i].thread, NULL)) fprintf(stderr, "Erro no 'join' de thread de parada.\n");   }
+            if(pthread_join(stops[i].thread, NULL))             fprintf(stderr, "Erro no 'join' de thread de parada.\n");   }
 
         for (i = 0; i < P; i++){
-                if(pthread_join(passageiros[i].thread, NULL)) fprintf(stderr, "Erro no 'join' de thread de passageiro.\n");     }
+                if(pthread_join(passageiros[i].thread, NULL))   fprintf(stderr, "Erro no 'join' de thread de passageiro.\n");   }
 
         for (i = 0; i < C; i++){
-                if(pthread_join(carros[i].thread, NULL)) fprintf(stderr, "Erro no 'join' de thread de carros.\n");  }
+                if(pthread_join(carros[i].thread, NULL))        printf(stderr, "Erro no 'join' de thread de carros.\n");    }
 
         sem_destroy(&mutex);
     }
@@ -243,6 +243,7 @@
 		}
 
 		uAnimacao();
+		sleep(1);
 
 	//Inicializa threads
 
@@ -278,62 +279,9 @@
 		}
 	}
 
-    //Mostra apenas uma tela da animação. Usada antes de iniciar as threads e depois que a simulação terminou,
-    //para se certificar que independente da ordem de execução da thread de animação, ela será executada ao menos uma vez
-    //logo após as structs serem inicializadas e logo
+    //Renderiza um "quadro" da animação.
     void uAnimacao(){
         printf("\033[H\033[J");
-            printf("\nPassageiros ainda em viagem: %d\n", passAindaViajando);
-            printf("Paradas (S): \n\n");
-            int i;
-            for (i = 0; i < S; i++){
-                printf("(S%d - P em espera: %d)\t", i, stops[i].passEsperando.size);
-                if (stops[i].carro >= 0) printf("(C%d - P a bordo: %d - Est: %d)\n", stops[i].carro, carros[stops[i].carro].contPass, carros[stops[i].carro].estado);
-                else printf("(S/ Carro)\n");
-            }
-
-            printf("\nOnibus na estrada(C): \n\n");
-            for (i = 0; i < C; i++){
-                    printf("C%d (S: %d, P a bordo: %d, ", i, carros[i].stop, carros[i].contPass);
-
-                    if (carros[i].tempoProxStop - (time(&tempo) - carros[i].horaSaida) >= 0 && carros[i].estado == 2)
-                        printf("ETA: %d, ", carros[i].tempoProxStop - (time(&tempo) - carros[i].horaSaida) );
-
-                    if      (carros[i].estado == 0) printf("Desembacando)\n");
-                    else if (carros[i].estado == 1) printf("Embarcando)\n");
-                    else if (carros[i].estado == 2) printf("Na estrada)\n");
-                //}
-            }
-
-            printf("\nPassageiros:\n\n");
-            for (i = 0; i < P; i++){
-                printf("P%d (%d -> %d) ",  i, passageiros[i].ptoPartida, passageiros[i].ptoChegada);
-                if (passageiros[i].estado == ptoPart || passageiros[i].estado == Dest)
-                    printf("S: %d, ", passageiros[i].ponto);
-                else if (passageiros[i].estado == indoDest || passageiros[i].estado == voltDest)
-                    printf("C: %d, ", passageiros[i].onibus);
-
-                if (passageiros[i].estado == ptoPart)           printf("No Pto de Partida\n");
-                else if (passageiros[i].estado == indoDest)     printf("Indo para o Pto de Destino\n");
-                else if (passageiros[i].estado == Dest){
-                    if (time(&tempo) - passageiros[i].horaChegada < passageiros[i].tempoEspera)
-                        printf("Passeando no Pto de Destino\n");
-                    else printf("Pronto para voltar do Pto de Destino\n");
-                }
-                else if (passageiros[i].estado == voltDest)     printf("Voltando para o Pto de Partida\n");
-                else if (passageiros[i].estado == fim)          printf("Terminou a Viagem\n");
-            }
-            sleep(1);
-    }
-
-
-//Funções paralelas
-    //Função da thread de animação
-	void *Animacao(void *argAnimacao){
-	    while(terminou == 0){
-            sem_wait(&mutex);
-
-            printf("\033[H\033[J");
             printf("\nPassageiros ainda em viagem: %d\n", passAindaViajando);
             printf("Paradas (S): \n\n");
             int i;
@@ -376,6 +324,15 @@
                 else if (passageiros[i].estado == voltDest)     printf("Voltando para o Pto de Partida\n");
                 else if (passageiros[i].estado == fim)          printf("Terminou a Viagem\n");
             }
+    }
+
+
+//Funções paralelas
+    //Função da thread de animação
+	void *Animacao(void *argAnimacao){
+	    while(terminou == 0){
+            sem_wait(&mutex);
+                uAnimacao();
             sem_post(&mutex);
 
             sleep(1);
@@ -605,4 +562,3 @@
 		queue.tail = NULL;
 		return queue;
 }
-
